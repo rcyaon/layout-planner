@@ -116,16 +116,3 @@ planning features.
 - **New netlist element:** map its SPICE prefix to a `DeviceKind` in
   `lib/netlist.ts`, and give it a size rule in `deviceSize()` in
   `lib/netlistImport.ts`.
-
-## Roadmap (not yet implemented)
-
-Differential-pair / current-mirror / OTA templates, array duplication,
-common-centroid & symmetry guides, guard-ring templates, power-grid planning,
-design-review comments, real-time collaboration, GDS/LEF annotation export, and a
-light theme. Netlist import could also auto-route wires from the connectivity it
-already stores on each device. The codebase is structured to make these additive.
-
-## Non-goals
-
-No DRC/LVS, no simulation, no process-correct layout generation. It complements —
-does not replace — Virtuoso, Magic or KLayout.
