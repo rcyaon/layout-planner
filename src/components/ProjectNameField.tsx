@@ -19,7 +19,7 @@ export default function ProjectNameField() {
 
   // A first-run affordance: once the project has a real name the pill speaks
   // for itself, so the hint retires rather than sitting in the header forever.
-  const showHint = projectName === 'Untitled' && !focused;
+  const showHint = projectName === 'untitled' && !focused;
 
   // Follow the store when the name changes elsewhere (new project, opening a
   // file, undo) — but never while the user is mid-edit.
@@ -28,7 +28,7 @@ export default function ProjectNameField() {
   }, [projectName]);
 
   const commit = () => {
-    const next = draft.trim() || 'Untitled';
+    const next = draft.trim() || 'untitled';
     setDraft(next);
     if (next !== projectName) setProjectName(next);
   };

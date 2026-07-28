@@ -126,7 +126,7 @@ function recomputeCounters(elements: Element[]): Record<string, number> {
 }
 
 export const useStore = create<AppState>((set, get) => ({
-  projectName: 'Untitled',
+  projectName: 'untitled',
   elements: [],
   layers: structuredClone(DEFAULT_LAYERS),
   grid: { ...DEFAULT_GRID },
@@ -486,7 +486,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   newProject: () =>
     set({
-      projectName: 'Untitled',
+      projectName: 'untitled',
       elements: [],
       layers: structuredClone(DEFAULT_LAYERS),
       grid: { ...DEFAULT_GRID },
@@ -498,7 +498,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadProject: (file) =>
     set({
-      projectName: file.name || 'Untitled',
+      projectName: file.name || 'untitled',
       elements: Array.isArray(file.elements) ? file.elements : [],
       layers: file.layers?.length ? file.layers : structuredClone(DEFAULT_LAYERS),
       grid: { ...DEFAULT_GRID, ...(file.grid || {}) },

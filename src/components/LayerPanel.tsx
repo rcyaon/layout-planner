@@ -9,7 +9,7 @@ export default function LayerPanel() {
 
   return (
     <div className="shrink-0 border-t border-edge">
-      <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">Metal Layers</div>
+      <div className="px-3 py-2 text-xs font-semibold tracking-wide text-muted">Metal Layers</div>
       {/* Capped so a long stack scrolls here instead of squeezing the library.
           pt-1 keeps the scroll edge from clipping the selected row's ring. */}
       <div className="scroll-thin flex max-h-56 flex-col gap-1 overflow-y-auto px-2 pb-3 pt-1">

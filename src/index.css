@@ -15,6 +15,21 @@ body {
   color: #2f2c3d;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  /* House style: the whole UI reads lowercase. Opt an element out with
+     Tailwind's `normal-case` where the literal casing matters. Canvas text is
+     drawn by Konva and is unaffected by this. */
+  text-transform: lowercase;
+}
+
+/* Anything holding real data rather than UI copy keeps its literal casing:
+   fields the user types into, and monospaced netlist identifiers where VDD and
+   vdd must not look alike. Lowercasing these would only change how they render
+   — the stored value keeps its case — so the two would silently disagree. */
+input,
+textarea,
+select,
+.font-mono {
+  text-transform: none;
 }
 
 /* Thin, friendly scrollbars */

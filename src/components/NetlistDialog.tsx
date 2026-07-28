@@ -153,7 +153,7 @@ export default function NetlistDialog() {
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 md:grid-cols-2 scroll-thin">
           {/* --- source ------------------------------------------------- */}
           <div className="flex min-h-0 flex-col">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Netlist source</div>
+            <div className="mb-2 text-xs font-semibold tracking-wide text-muted">Netlist source</div>
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -214,7 +214,7 @@ export default function NetlistDialog() {
 
           {/* --- preview + options -------------------------------------- */}
           <div className="flex min-h-0 flex-col">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+            <div className="mb-2 text-xs font-semibold tracking-wide text-muted">
               Cells to generate
             </div>
 
@@ -268,7 +268,7 @@ export default function NetlistDialog() {
                   </details>
                 )}
 
-                <div className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Placement</div>
+                <div className="mb-1 mt-4 text-xs font-semibold tracking-wide text-muted">Placement</div>
                 <Check
                   label="Scale devices by W/L and passive values"
                   checked={opts.scaleToSize}
