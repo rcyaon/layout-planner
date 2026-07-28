@@ -1,27 +1,34 @@
 import { useEffect, useRef } from 'react';
-import type { ViewState } from '../types';
+import type { Unit, ViewState } from '../types';
+import { UNIT_LABEL, formatValue, niceStep } from '../lib/units';
 
 interface Props {
   width: number;
   height: number;
   view: ViewState;
-  step: number;
+  unit: Unit;
 }
+
+/** Minimum pixels between labelled ticks — enough room for the text. */
+const TICK_PX = 70;
 
 const SIZE = 22;
 const BG = '#241f18';
 const FG = '#6d6350';
 const TXT = '#9c9077';
 
-/** Screen-space top + left rulers drawn on 2D canvases. */
-export default function Rulers({ width, height, view, step }: Props) {
+/** Screen-space top + left rulers drawn on 2D canvases, labelled in `unit`. */
+export default function Rulers({ width, height, view, unit }: Props) {
   const topRef = useRef<HTMLCanvasElement>(null);
   const leftRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const dpr = window.devicePixelRatio || 1;
-    let major = step;
-    while (major * view.scale < 60) major *= 5;
+    // A ruler is a scale, not the grid: it picks whatever round step reads well
+    // at this zoom, so it keeps subdividing past the snap step instead of
+    // emptying out once you are magnified beyond it.
+    const major = niceStep(TICK_PX / view.scale);
+    const suffix = ` ${UNIT_LABEL[unit]}`;
 
     // top ruler
     const top = topRef.current;
@@ -42,7 +49,8 @@ export default function Rulers({ width, height, view, step }: Props) {
         if (sx < 0) continue;
         ctx.moveTo(sx, SIZE);
         ctx.lineTo(sx, SIZE - 8);
-        ctx.fillText(String(Math.round(wx)), sx + 2, 10);
+        // Only the origin carries the unit, so the ruler stays uncluttered.
+        ctx.fillText(formatValue(wx, unit) + (wx === 0 ? suffix : ''), sx + 2, 10);
       }
       ctx.stroke();
     }
@@ -69,12 +77,12 @@ export default function Rulers({ width, height, view, step }: Props) {
         ctx.save();
         ctx.translate(10, sy + 2);
         ctx.rotate(-Math.PI / 2);
-        ctx.fillText(String(Math.round(wy)), 0, 0);
+        ctx.fillText(formatValue(wy, unit) + (wy === 0 ? suffix : ''), 0, 0);
         ctx.restore();
       }
       ctx.stroke();
     }
-  }, [width, height, view.x, view.y, view.scale, step]);
+  }, [width, height, view.x, view.y, view.scale, unit]);
 
   return (
     <>

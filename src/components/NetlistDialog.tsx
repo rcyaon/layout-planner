@@ -5,6 +5,7 @@ import { useStore } from '../store/useStore';
 import { parseNetlist, summarizeCell } from '../lib/netlist';
 import type { NetlistCell } from '../lib/netlist';
 import { DEFAULT_IMPORT_OPTIONS, buildNetlistElements } from '../lib/netlistImport';
+import { UNIT_LABEL, fromUnit, toUnit } from '../lib/units';
 
 const EXAMPLE = `* 5-transistor OTA
 .subckt ota vinp vinn vout vbias vdd vss
@@ -48,6 +49,7 @@ function Check({
 export default function NetlistDialog() {
   const open = useStore((s) => s.dialog === 'netlist');
   const setDialog = useStore((s) => s.setDialog);
+  const unit = useStore((s) => s.unit);
 
   const [text, setText] = useState('');
   const [fileName, setFileName] = useState('');
@@ -305,13 +307,17 @@ export default function NetlistDialog() {
                     <input
                       type="number"
                       min={0}
-                      step={10}
-                      value={opts.spacing}
+                      step={toUnit(100, unit)}
+                      value={toUnit(opts.spacing, unit)}
                       onChange={(e) =>
-                        setOpts((o) => ({ ...o, spacing: Math.max(0, parseInt(e.target.value, 10) || 0) }))
+                        setOpts((o) => ({
+                          ...o,
+                          spacing: Math.max(0, Math.round(fromUnit(Number(e.target.value) || 0, unit))),
+                        }))
                       }
-                      className="w-16 rounded border border-edge bg-panelalt px-2 py-1 text-right text-ink outline-none focus:border-accent"
+                      className="w-20 rounded border border-edge bg-panelalt px-2 py-1 text-right text-ink outline-none focus:border-accent"
                     />
+                    <span className="text-[11px] text-muted">{UNIT_LABEL[unit]}</span>
                   </label>
                 </div>
               </>

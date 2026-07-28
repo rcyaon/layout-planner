@@ -35,6 +35,9 @@ src/
   store/useStore.ts        # Zustand store: elements, selection, layers,
                            #   history (undo/redo), clipboard, align/distribute
   lib/
+    units.ts               # nm database unit, display units, zoom limits,
+                           #   formatting, 1-2-5 grid/ruler stepping
+    projectFile.ts         # defaults + migration of older project versions
     componentDefs.ts       # symbolic device catalog
     geometry.ts            # snap, bounds, intersection, ids
     exporters.ts           # PNG / PDF (Konva) · SVG (model) · JSON
@@ -45,9 +48,11 @@ src/
                            #   box-select, group-move, transformer
     ElementNode.tsx        # renders one element (device/shape/wire/text/measure)
     DeviceSymbol.tsx       # per-device symbolic glyphs
+    DieFrame.tsx           # fixed-die boundary, dimming and dimensions
     Rulers.tsx             # screen-space rulers
   components/
     Toolbar.tsx            # tools + edit actions + file/export
+    CanvasSetup.tsx        # die area, grid and display unit popover
     ComponentLibrary.tsx   # draggable device palette
     PropertiesPanel.tsx    # context-sensitive property editor
     LayerPanel.tsx         # metal-layer manager
@@ -62,8 +67,10 @@ planning features.
 
 ### Extending
 
-- **New device:** add an entry to `DEVICE_DEFS` in `lib/componentDefs.ts` and a
-  glyph branch in `canvas/DeviceSymbol.tsx`.
+- **New device:** add an entry to `DEVICE_DEFS` in `lib/componentDefs.ts` (sizes
+  in nm) and a glyph branch in `canvas/DeviceSymbol.tsx`. Size symbol detail as a
+  fraction of the device; use `px(n)` from `lib/units.ts`, or divide by `scale`,
+  only for ink that should stay a constant weight on screen.
 - **New layer:** extend `DEFAULT_LAYERS` and the `LayerId` union in `types.ts`.
 - **New tool / element type:** add to the `Tool` union and the `Element` union,
   then handle it in `CanvasStage` (interaction) and `ElementNode` (rendering).

@@ -39,6 +39,7 @@ import { useStore } from '../store/useStore';
 import type { Tool } from '../types';
 import { stageHolder } from '../canvas/stageHolder';
 import { exportProjectJSON, exportSVG, exportStagePNG, exportStagePDF } from '../lib/exporters';
+import CanvasSetup from './CanvasSetup';
 
 const TOOLS: { tool: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { tool: 'select', icon: MousePointer2, label: 'Select', key: 'V' },
@@ -121,7 +122,7 @@ export default function Toolbar() {
     const st = s();
     const name = st.projectName.replace(/[^\w.-]+/g, '_') || 'layout';
     if (kind === 'json') exportProjectJSON(st.toProjectFile());
-    else if (kind === 'svg') exportSVG(st.elements, st.layers, name);
+    else if (kind === 'svg') exportSVG(st.elements, st.layers, name, { die: st.die, unit: st.unit });
     else if (stageHolder.stage) {
       if (kind === 'png') exportStagePNG(stageHolder.stage, name);
       else exportStagePDF(stageHolder.stage, name);
@@ -189,6 +190,8 @@ export default function Toolbar() {
           </div>
         </>
       )}
+      <Divider />
+      <CanvasSetup />
       <Divider />
       <IconBtn icon={Undo2} label="Undo (Ctrl+Z)" disabled={!canUndo} onClick={() => s().undo()} />
       <IconBtn icon={Redo2} label="Redo (Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => s().redo()} />

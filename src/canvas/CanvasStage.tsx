@@ -3,10 +3,12 @@ import type { DragEvent as RDragEvent, ReactNode } from 'react';
 import { Stage, Layer, Line, Rect, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import { useStore } from '../store/useStore';
+import { useStore, outsideDie } from '../store/useStore';
 import type { Element, LayerId, DeviceKind, ShapeElement, WireElement, MeasureElement } from '../types';
 import { snap, getBounds, rectsIntersect, uid } from '../lib/geometry';
+import { clampScale, px, visibleStep } from '../lib/units';
 import ElementNode from './ElementNode';
+import DieFrame from './DieFrame';
 import Rulers from './Rulers';
 import { stageHolder } from './stageHolder';
 
@@ -16,6 +18,12 @@ const AXIS = '#463d2f';
 const RULER = 22;
 const SELECT = '#8aa0e0';
 const DEFAULT_STROKE = '#e2e8f0';
+
+/** Default ink weights, in nm (see `px` in lib/units). */
+const SHAPE_STROKE = px(2);
+const WIRE_STROKE = px(3);
+/** Shortest drag that counts as drawing rather than a stray click, in pixels. */
+const MIN_DRAG_PX = 3;
 
 interface Draft {
   tool: string;
@@ -59,6 +67,8 @@ export default function CanvasStage() {
   const elements = useStore((s) => s.elements);
   const layers = useStore((s) => s.layers);
   const grid = useStore((s) => s.grid);
+  const die = useStore((s) => s.die);
+  const unit = useStore((s) => s.unit);
   const tool = useStore((s) => s.tool);
   const activeLayer = useStore((s) => s.activeLayer);
   const selectedIds = useStore((s) => s.selectedIds);
@@ -66,6 +76,7 @@ export default function CanvasStage() {
 
   const hiddenLayers = new Set(layers.filter((l) => !l.visible).map((l) => l.id));
   const lockedLayers = new Set(layers.filter((l) => l.locked).map((l) => l.id));
+  const overflowing = outsideDie(elements, die).length > 0;
 
   const layerOf = (el: Element): LayerId | null =>
     el.type === 'wire'
@@ -182,7 +193,7 @@ export default function CanvasStage() {
     };
     // Pinch deltas are fine-grained, so scale the step by the delta itself
     // instead of a fixed factor — otherwise trackpad zoom feels stepped.
-    const newScale = Math.max(0.05, Math.min(20, oldScale * Math.exp(-e.evt.deltaY / 200)));
+    const newScale = clampScale(oldScale * Math.exp(-e.evt.deltaY / 200));
     st.setView({
       scale: newScale,
       x: pointer.x - mousePointTo.x * newScale,
@@ -237,7 +248,8 @@ export default function CanvasStage() {
       const by = Math.min(box.sy, box.cy);
       const bw = Math.abs(box.cx - box.sx);
       const bh = Math.abs(box.cy - box.sy);
-      if (bw > 3 || bh > 3) {
+      const minBox = MIN_DRAG_PX / view.scale;
+      if (bw > minBox || bh > minBox) {
         const rect = { x: bx, y: by, width: bw, height: bh };
         const hits = elements
           .filter((el) => {
@@ -251,7 +263,9 @@ export default function CanvasStage() {
       setBox(null);
     }
     if (draft) {
-      const el = makeDraftElement(draft, activeLayer);
+      // The minimum is a screen distance, so it means the same thing whether
+      // you are drawing a 200 nm contact or a 200 µm power rail.
+      const el = makeDraftElement(draft, MIN_DRAG_PX / view.scale);
       if (el) st.addElement(el);
       setDraft(null);
     }
@@ -269,7 +283,7 @@ export default function CanvasStage() {
       const w: WireElement = {
         id: uid(), type: 'wire', x: ox, y: oy, rotation: 0,
         label: '', notes: '', locked: false, groupId: null,
-        points: rel, strokeWidth: 3, layer: activeLayer,
+        points: rel, strokeWidth: WIRE_STROKE, layer: activeLayer,
       };
       st.addElement(w);
     } else {
@@ -277,7 +291,7 @@ export default function CanvasStage() {
         id: uid(), type: 'shape', shape: 'polyline', x: ox, y: oy, rotation: 0,
         label: '', notes: '', locked: false, groupId: null,
         width: 0, height: 0, points: rel, stroke: DEFAULT_STROKE, fill: 'transparent',
-        strokeWidth: 2, layer: null,
+        strokeWidth: SHAPE_STROKE, layer: null,
       };
       st.addElement(shape);
     }
@@ -357,12 +371,13 @@ export default function CanvasStage() {
       node.scaleX(1);
       node.scaleY(1);
       if (el.type === 'text') {
-        const width = Math.max(20, el.width * sx);
-        const fontSize = Math.max(6, el.fontSize * sy);
+        const width = Math.max(px(20), el.width * sx);
+        const fontSize = Math.max(px(6), el.fontSize * sy);
         st.updateElement(id, { x: node.x(), y: node.y(), width, fontSize, rotation: node.rotation() });
       } else if ('width' in el && 'height' in el) {
-        const width = Math.max(6, Math.round(el.width * sx));
-        const height = Math.max(6, Math.round(el.height * sy));
+        // Geometry is whole nanometres — the database unit has no sub-divisions.
+        const width = Math.max(1, Math.round(el.width * sx));
+        const height = Math.max(1, Math.round(el.height * sy));
         st.updateElement(id, {
           x: node.x() - width / 2,
           y: node.y() - height / 2,
@@ -388,8 +403,9 @@ export default function CanvasStage() {
   // --- grid lines -----------------------------------------------------------
   const gridLines: ReactNode[] = [];
   if (grid.visible) {
-    let step = grid.size;
-    while (step * view.scale < 6) step *= 5;
+    // The snap step itself once it is far enough apart to read, otherwise a
+    // whole multiple of it — so a drawn line always lands on a snap position.
+    const step = visibleStep(grid.size, view.scale, 6);
     const x0 = -view.x / view.scale;
     const y0 = -view.y / view.scale;
     const x1 = x0 + size.width / view.scale;
@@ -462,7 +478,10 @@ export default function CanvasStage() {
         }}
         style={{ cursor: cursorStyle }}
       >
-        <Layer listening={false}>{gridLines}</Layer>
+        <Layer listening={false}>
+          {gridLines}
+          <DieFrame die={die} scale={view.scale} unit={unit} overflowing={overflowing} />
+        </Layer>
 
         <Layer>
           {elements.map((el) => {
@@ -476,6 +495,8 @@ export default function CanvasStage() {
                 el={el}
                 selected={selectedIds.includes(el.id)}
                 layers={layers}
+                unit={unit}
+                scale={view.scale}
                 draggable={draggable}
                 interactive={!layerLocked}
                 onSelect={onSelectNode}
@@ -490,7 +511,13 @@ export default function CanvasStage() {
 
         <Layer>
           {/* draft preview */}
-          {draft && <DraftPreview draft={draft} layerColor={layers.find((l) => l.id === activeLayer)?.color ?? DEFAULT_STROKE} />}
+          {draft && (
+            <DraftPreview
+              draft={draft}
+              scale={view.scale}
+              layerColor={layers.find((l) => l.id === activeLayer)?.color ?? DEFAULT_STROKE}
+            />
+          )}
           {/* polyline / wire preview */}
           {poly && (
             <Line
@@ -512,6 +539,8 @@ export default function CanvasStage() {
               strokeWidth={1 / view.scale}
             />
           )}
+          {/* Konva already draws transformer handles in screen pixels, so these
+              are the one piece of canvas chrome that needs no scale division. */}
           <Transformer
             ref={trRef}
             rotationSnaps={[0, 90, 180, 270]}
@@ -524,7 +553,14 @@ export default function CanvasStage() {
         </Layer>
       </Stage>
 
-      {grid.showRulers && <Rulers width={size.width - RULER} height={size.height - RULER} view={view} step={grid.size} />}
+      {grid.showRulers && (
+        <Rulers
+          width={size.width - RULER}
+          height={size.height - RULER}
+          view={view}
+          unit={unit}
+        />
+      )}
     </div>
   );
 }
@@ -536,7 +572,8 @@ function isTypingTarget(t: EventTarget | null): boolean {
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
 }
 
-function makeDraftElement(d: Draft, activeLayer: LayerId): Element | null {
+/** `min` is the shortest drag that counts, in nm at the current zoom. */
+function makeDraftElement(d: Draft, min: number): Element | null {
   const x = Math.min(d.sx, d.cx);
   const y = Math.min(d.sy, d.cy);
   const w = Math.abs(d.cx - d.sx);
@@ -544,42 +581,44 @@ function makeDraftElement(d: Draft, activeLayer: LayerId): Element | null {
   const base = { id: uid(), rotation: 0, label: '', notes: '', locked: false, groupId: null as string | null };
 
   if (d.tool === 'rect' || d.tool === 'circle') {
-    if (w < 3 || h < 3) return null;
+    if (w < min || h < min) return null;
     return {
       ...base, type: 'shape', shape: d.tool, x, y, width: w, height: h,
-      points: [], stroke: DEFAULT_STROKE, fill: 'transparent', strokeWidth: 2, layer: null,
+      points: [], stroke: DEFAULT_STROKE, fill: 'transparent', strokeWidth: SHAPE_STROKE, layer: null,
     } as ShapeElement;
   }
   if (d.tool === 'line' || d.tool === 'arrow') {
-    if (Math.hypot(d.cx - d.sx, d.cy - d.sy) < 3) return null;
+    if (Math.hypot(d.cx - d.sx, d.cy - d.sy) < min) return null;
     return {
       ...base, type: 'shape', shape: d.tool, x: d.sx, y: d.sy, width: 0, height: 0,
       points: [0, 0, d.cx - d.sx, d.cy - d.sy], stroke: DEFAULT_STROKE, fill: 'transparent',
-      strokeWidth: 2, layer: null,
+      strokeWidth: SHAPE_STROKE, layer: null,
     } as ShapeElement;
   }
   if (d.tool === 'measure') {
-    if (Math.hypot(d.cx - d.sx, d.cy - d.sy) < 3) return null;
+    if (Math.hypot(d.cx - d.sx, d.cy - d.sy) < min) return null;
     return {
       ...base, type: 'measure', x: d.sx, y: d.sy, points: [0, 0, d.cx - d.sx, d.cy - d.sy],
     } as MeasureElement;
   }
   // wire single-segment via drag fallback (not used; wire uses poly)
-  void activeLayer;
   return null;
 }
 
-function DraftPreview({ draft, layerColor }: { draft: Draft; layerColor: string }) {
+function DraftPreview({ draft, scale, layerColor }: { draft: Draft; scale: number; layerColor: string }) {
   const x = Math.min(draft.sx, draft.cx);
   const y = Math.min(draft.sy, draft.cy);
   const w = Math.abs(draft.cx - draft.sx);
   const h = Math.abs(draft.cy - draft.sy);
+  // Preview ink is drawn in screen pixels — it is a cursor, not geometry.
+  const line = 1 / scale;
+  const dash = [4 / scale, 3 / scale];
   if (draft.tool === 'rect') {
-    return <Rect x={x} y={y} width={w} height={h} stroke={DEFAULT_STROKE} strokeWidth={1} dash={[4, 3]} />;
+    return <Rect x={x} y={y} width={w} height={h} stroke={DEFAULT_STROKE} strokeWidth={line} dash={dash} />;
   }
   if (draft.tool === 'circle') {
-    return <Rect x={x} y={y} width={w} height={h} stroke={DEFAULT_STROKE} strokeWidth={1} dash={[4, 3]} cornerRadius={Math.min(w, h) / 2} />;
+    return <Rect x={x} y={y} width={w} height={h} stroke={DEFAULT_STROKE} strokeWidth={line} dash={dash} cornerRadius={Math.min(w, h) / 2} />;
   }
   const color = draft.tool === 'measure' ? '#fbbf24' : layerColor;
-  return <Line points={[draft.sx, draft.sy, draft.cx, draft.cy]} stroke={color} strokeWidth={1} dash={[4, 3]} />;
+  return <Line points={[draft.sx, draft.sy, draft.cx, draft.cy]} stroke={color} strokeWidth={line} dash={dash} />;
 }

@@ -1,6 +1,6 @@
-import { Minus, Plus, Maximize, Crosshair } from 'lucide-react';
-import { useStore } from '../store/useStore';
-import { getBounds } from '../lib/geometry';
+import { Minus, Plus, Maximize, Crosshair, AlertTriangle } from 'lucide-react';
+import { useStore, outsideDie } from '../store/useStore';
+import { DEFAULT_SCALE, UNIT_LABEL, clampScale, formatAuto, formatValue } from '../lib/units';
 
 export default function StatusBar() {
   const view = useStore((s) => s.view);
@@ -9,10 +9,14 @@ export default function StatusBar() {
   const activeLayer = useStore((s) => s.activeLayer);
   const layers = useStore((s) => s.layers);
   const grid = useStore((s) => s.grid);
+  const unit = useStore((s) => s.unit);
+  const die = useStore((s) => s.die);
   const count = useStore((s) => s.elements.length);
   const selCount = useStore((s) => s.selectedIds.length);
+  const outside = useStore((s) => outsideDie(s.elements, s.die).length);
 
   const active = layers.find((l) => l.id === activeLayer);
+  const u = UNIT_LABEL[unit];
 
   const zoomAround = (factor: number) => {
     const st = useStore.getState();
@@ -20,38 +24,10 @@ export default function StatusBar() {
     const cx = width / 2;
     const cy = height / 2;
     const oldScale = st.view.scale;
-    let newScale = Math.max(0.05, Math.min(20, oldScale * factor));
+    const newScale = clampScale(oldScale * factor);
     const wx = (cx - st.view.x) / oldScale;
     const wy = (cy - st.view.y) / oldScale;
     st.setView({ scale: newScale, x: cx - wx * newScale, y: cy - wy * newScale });
-  };
-
-  const reset = () => useStore.getState().setView({ x: 0, y: 0, scale: 1 });
-
-  const fit = () => {
-    const st = useStore.getState();
-    if (!st.elements.length) return reset();
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const el of st.elements) {
-      const b = getBounds(el);
-      minX = Math.min(minX, b.x);
-      minY = Math.min(minY, b.y);
-      maxX = Math.max(maxX, b.x + b.width);
-      maxY = Math.max(maxY, b.y + b.height);
-    }
-    const pad = 60;
-    const bw = maxX - minX || 1;
-    const bh = maxY - minY || 1;
-    const { width, height } = st.stageSize;
-    const scale = Math.max(0.05, Math.min(8, Math.min((width - pad) / bw, (height - pad) / bh)));
-    st.setView({
-      scale,
-      x: width / 2 - ((minX + maxX) / 2) * scale,
-      y: height / 2 - ((minY + maxY) / 2) * scale,
-    });
   };
 
   return (
@@ -61,29 +37,65 @@ export default function StatusBar() {
         <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: active?.color }} />
         {active?.name}
       </span>
-      <span>Snap {grid.snap ? 'on' : 'off'} · {grid.size}u</span>
       <span>
-        x {cursor.x}, y {cursor.y}
+        Snap {grid.snap ? 'on' : 'off'} · {formatAuto(grid.size)}
+      </span>
+      <span>
+        x {formatValue(cursor.x, unit)}, y {formatValue(cursor.y, unit)} {u}
+      </span>
+      <span>
+        {die.mode === 'fixed'
+          ? `Die ${formatValue(die.width, unit)} × ${formatValue(die.height, unit)} ${u}`
+          : 'Infinite canvas'}
       </span>
       <span>
         {count} object{count === 1 ? '' : 's'}
         {selCount ? ` · ${selCount} selected` : ''}
       </span>
+      {outside > 0 && (
+        <span
+          className="flex items-center gap-1 text-accent2"
+          title="These objects stick out past the die boundary"
+        >
+          <AlertTriangle size={12} />
+          {outside} outside die
+        </span>
+      )}
       <div className="ml-auto flex items-center gap-1">
-        <button title="Zoom to fit" onClick={fit} className="rounded p-1 text-ink hover:bg-panelalt">
+        <button
+          title="Zoom to fit"
+          onClick={() => useStore.getState().fitTo()}
+          className="rounded p-1 text-ink hover:bg-panelalt"
+        >
           <Maximize size={14} />
         </button>
-        <button title="Reset view" onClick={reset} className="rounded p-1 text-ink hover:bg-panelalt">
+        <button
+          title={die.mode === 'fixed' ? 'Fit the die' : 'Reset view'}
+          onClick={() => useStore.getState().resetView()}
+          className="rounded p-1 text-ink hover:bg-panelalt"
+        >
           <Crosshair size={14} />
         </button>
         <button title="Zoom out" onClick={() => zoomAround(1 / 1.2)} className="rounded p-1 text-ink hover:bg-panelalt">
           <Minus size={14} />
         </button>
-        <span className="w-12 text-center text-ink">{Math.round(view.scale * 100)}%</span>
+        {/* 100 % is the reference zoom where one pixel covers NM_PER_PX nm. */}
+        <span className="w-14 text-center text-ink" title={`${(view.scale * 1000).toPrecision(3)} px per µm`}>
+          {formatZoom(view.scale)}
+        </span>
         <button title="Zoom in" onClick={() => zoomAround(1.2)} className="rounded p-1 text-ink hover:bg-panelalt">
           <Plus size={14} />
         </button>
       </div>
     </div>
   );
+}
+
+/** Zoom as a percentage of the reference scale, readable across 6 decades. */
+function formatZoom(scale: number): string {
+  const pct = (scale / DEFAULT_SCALE) * 100;
+  if (pct >= 100) return `${Math.round(pct)}%`;
+  if (pct >= 10) return `${pct.toFixed(0)}%`;
+  if (pct >= 1) return `${pct.toFixed(1)}%`;
+  return `${pct.toFixed(2)}%`;
 }

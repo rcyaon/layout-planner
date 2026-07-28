@@ -5,6 +5,7 @@ import type {
   TextElement,
   Layer,
   GridSettings,
+  DieSettings,
   ViewState,
   Tool,
   LayerId,
@@ -13,6 +14,15 @@ import type {
 } from '../types';
 import { DEVICE_DEF_MAP } from '../lib/componentDefs';
 import { getBounds, uid, type Bounds } from '../lib/geometry';
+import { DEFAULT_SCALE, clampScale, px, type Unit } from '../lib/units';
+import {
+  DEFAULT_DIE,
+  DEFAULT_GRID,
+  DEFAULT_UNIT,
+  migrateProject,
+} from '../lib/projectFile';
+
+export { DEFAULT_DIE, DEFAULT_GRID } from '../lib/projectFile';
 
 export const DEFAULT_LAYERS: Layer[] = [
   { id: 'M1', name: 'Metal 1', color: '#5570c4', visible: true, locked: false },
@@ -20,12 +30,15 @@ export const DEFAULT_LAYERS: Layer[] = [
   { id: 'M3', name: 'Metal 3', color: '#c15749', visible: true, locked: false },
 ];
 
-export const DEFAULT_GRID: GridSettings = {
-  size: 20,
-  snap: true,
-  visible: true,
-  showRulers: true,
-};
+/** Where a fresh project starts: the origin a little in from the top-left. */
+export const DEFAULT_VIEW: ViewState = { x: 80, y: 80, scale: DEFAULT_SCALE };
+
+/** Offset applied to duplicated / pasted elements, in nm. */
+const DUPLICATE_OFFSET = px(20);
+const PASTE_OFFSET = px(24);
+
+/** Default type size for a new text element, in nm. */
+const TEXT_FONT_SIZE = px(16);
 
 export type DialogId = 'netlist' | null;
 
@@ -43,6 +56,9 @@ interface AppState {
   elements: Element[];
   layers: Layer[];
   grid: GridSettings;
+  die: DieSettings;
+  /** Unit every length is shown and entered in. Storage is always nm. */
+  unit: Unit;
 
   tool: Tool;
   activeLayer: LayerId;
@@ -64,9 +80,16 @@ interface AppState {
   setView: (patch: Partial<ViewState>) => void;
   setCursor: (x: number, y: number) => void;
   setGrid: (patch: Partial<GridSettings>) => void;
+  setDie: (patch: Partial<DieSettings>) => void;
+  setUnit: (u: Unit) => void;
   setLayer: (id: LayerId, patch: Partial<Layer>) => void;
   setProjectName: (name: string) => void;
   setDialog: (d: DialogId) => void;
+
+  // viewport ---------------------------------------------------------------
+  /** Frame `rect` (nm) in the viewport, or the whole design when omitted. */
+  fitTo: (rect?: Bounds) => void;
+  resetView: () => void;
 
   // history ----------------------------------------------------------------
   pushHistory: () => void;
@@ -102,7 +125,8 @@ interface AppState {
 
   // project ----------------------------------------------------------------
   newProject: () => void;
-  loadProject: (file: ProjectFile) => void;
+  /** Takes raw parsed JSON — older file versions are migrated on the way in. */
+  loadProject: (raw: unknown) => void;
   toProjectFile: () => ProjectFile;
 }
 
@@ -111,6 +135,38 @@ function pushSnap(s: AppState) {
     past: [...s.past, { elements: s.elements, layers: s.layers }].slice(-120),
     future: [] as Snapshot[],
   };
+}
+
+/**
+ * Everything worth framing: the die (when there is one) plus every element, so
+ * "zoom to fit" never hides work that has drifted outside the die.
+ */
+export function contentBounds(elements: Element[], die: DieSettings): Bounds | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const add = (b: Bounds) => {
+    minX = Math.min(minX, b.x);
+    minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.width);
+    maxY = Math.max(maxY, b.y + b.height);
+  };
+  if (die.mode === 'fixed') add({ x: 0, y: 0, width: die.width, height: die.height });
+  for (const el of elements) add(getBounds(el));
+  if (minX === Infinity) return null;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/** Ids of elements not fully inside a fixed die. Empty on an infinite canvas. */
+export function outsideDie(elements: Element[], die: DieSettings): string[] {
+  if (die.mode !== 'fixed') return [];
+  return elements
+    .filter((el) => {
+      const b = getBounds(el);
+      return b.x < 0 || b.y < 0 || b.x + b.width > die.width || b.y + b.height > die.height;
+    })
+    .map((el) => el.id);
 }
 
 function recomputeCounters(elements: Element[]): Record<string, number> {
@@ -130,11 +186,13 @@ export const useStore = create<AppState>((set, get) => ({
   elements: [],
   layers: structuredClone(DEFAULT_LAYERS),
   grid: { ...DEFAULT_GRID },
+  die: { ...DEFAULT_DIE },
+  unit: DEFAULT_UNIT,
 
   tool: 'select',
   activeLayer: 'M1',
   selectedIds: [],
-  view: { x: 0, y: 0, scale: 1 },
+  view: { ...DEFAULT_VIEW },
   cursor: { x: 0, y: 0 },
   stageSize: { width: 800, height: 600 },
   dialog: null,
@@ -149,10 +207,40 @@ export const useStore = create<AppState>((set, get) => ({
   setView: (patch) => set((s) => ({ view: { ...s.view, ...patch } })),
   setCursor: (x, y) => set({ cursor: { x, y } }),
   setGrid: (patch) => set((s) => ({ grid: { ...s.grid, ...patch } })),
+  setDie: (patch) => set((s) => ({ die: { ...s.die, ...patch } })),
+  setUnit: (u) => set({ unit: u }),
   setLayer: (id, patch) =>
     set((s) => ({ layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)) })),
   setProjectName: (name) => set({ projectName: name }),
   setDialog: (d) => set({ dialog: d }),
+
+  fitTo: (rect) => {
+    const s = get();
+    const target = rect ?? contentBounds(s.elements, s.die);
+    if (!target) return get().resetView();
+    const { width, height } = s.stageSize;
+    // Leave a tenth of the viewport as breathing room on every side.
+    const scale = clampScale(
+      Math.min((width * 0.9) / (target.width || 1), (height * 0.9) / (target.height || 1)),
+    );
+    set({
+      view: {
+        scale,
+        x: width / 2 - (target.x + target.width / 2) * scale,
+        y: height / 2 - (target.y + target.height / 2) * scale,
+      },
+    });
+  },
+
+  resetView: () => {
+    const s = get();
+    // A bounded die has an obvious "home"; an infinite canvas only has the origin.
+    if (s.die.mode === 'fixed') {
+      get().fitTo({ x: 0, y: 0, width: s.die.width, height: s.die.height });
+      return;
+    }
+    set({ view: { ...DEFAULT_VIEW } });
+  },
 
   pushHistory: () => set((s) => pushSnap(s)),
 
@@ -282,9 +370,9 @@ export const useStore = create<AppState>((set, get) => ({
         locked: false,
         groupId: null,
         text: callout ? 'Callout' : 'Label',
-        fontSize: 16,
+        fontSize: TEXT_FONT_SIZE,
         color: '#e7e7ee',
-        width: 160,
+        width: TEXT_FONT_SIZE * 10,
         callout,
       };
       return { ...pushSnap(s), elements: [...s.elements, el], selectedIds: [el.id] };
@@ -335,7 +423,13 @@ export const useStore = create<AppState>((set, get) => ({
       const groupRemap: Record<string, string> = {};
       const copies = sel.map((e) => {
         const gid = e.groupId ? (groupRemap[e.groupId] ??= uid()) : null;
-        return { ...e, id: uid(), x: e.x + 20, y: e.y + 20, groupId: gid } as Element;
+        return {
+          ...e,
+          id: uid(),
+          x: e.x + DUPLICATE_OFFSET,
+          y: e.y + DUPLICATE_OFFSET,
+          groupId: gid,
+        } as Element;
       });
       return {
         ...pushSnap(s),
@@ -357,7 +451,13 @@ export const useStore = create<AppState>((set, get) => ({
       const groupRemap: Record<string, string> = {};
       const copies = s.clipboard.map((e) => {
         const gid = e.groupId ? (groupRemap[e.groupId] ??= uid()) : null;
-        return { ...structuredClone(e), id: uid(), x: e.x + 24, y: e.y + 24, groupId: gid } as Element;
+        return {
+          ...structuredClone(e),
+          id: uid(),
+          x: e.x + PASTE_OFFSET,
+          y: e.y + PASTE_OFFSET,
+          groupId: gid,
+        } as Element;
       });
       return {
         ...pushSnap(s),
@@ -484,38 +584,51 @@ export const useStore = create<AppState>((set, get) => ({
       };
     }),
 
-  newProject: () =>
+  newProject: () => {
     set({
       projectName: 'untitled',
       elements: [],
       layers: structuredClone(DEFAULT_LAYERS),
       grid: { ...DEFAULT_GRID },
+      die: { ...DEFAULT_DIE },
+      unit: DEFAULT_UNIT,
       selectedIds: [],
       past: [],
       future: [],
       labelCounters: {},
-    }),
+    });
+    get().resetView();
+  },
 
-  loadProject: (file) =>
+  /** Accepts files from any version — `migrateProject` normalizes them. */
+  loadProject: (raw) => {
+    const file = migrateProject(raw);
+    if (!file) return;
     set({
-      projectName: file.name || 'untitled',
-      elements: Array.isArray(file.elements) ? file.elements : [],
-      layers: file.layers?.length ? file.layers : structuredClone(DEFAULT_LAYERS),
-      grid: { ...DEFAULT_GRID, ...(file.grid || {}) },
+      projectName: file.name,
+      elements: file.elements,
+      layers: file.layers.length ? file.layers : structuredClone(DEFAULT_LAYERS),
+      grid: file.grid,
+      die: file.die,
+      unit: file.unit,
       selectedIds: [],
       past: [],
       future: [],
-      labelCounters: recomputeCounters(file.elements || []),
-    }),
+      labelCounters: recomputeCounters(file.elements),
+    });
+    get().fitTo();
+  },
 
   toProjectFile: () => {
     const s = get();
     return {
-      version: 1,
+      version: 2,
       name: s.projectName,
       elements: s.elements,
       layers: s.layers,
       grid: s.grid,
+      die: s.die,
+      unit: s.unit,
       savedAt: new Date().toISOString(),
     };
   },

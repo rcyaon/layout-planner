@@ -92,8 +92,9 @@ export default function App() {
       if (e.key.startsWith('Arrow')) {
         e.preventDefault();
         if (st.selectedIds.length) {
-          // Something is selected — nudge it.
-          const d = st.grid.snap ? st.grid.size : 1;
+          // Something is selected — nudge it by one grid step, or by one screen
+          // pixel's worth of nanometres when there is no grid to follow.
+          const d = st.grid.snap ? st.grid.size : Math.max(1, Math.round(1 / st.view.scale));
           const step = e.shiftKey ? d * 5 : d;
           if (e.key === 'ArrowLeft') st.moveSelectedBy(-step, 0);
           else if (e.key === 'ArrowRight') st.moveSelectedBy(step, 0);

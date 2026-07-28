@@ -1,8 +1,9 @@
 import { jsPDF } from 'jspdf';
 import type Konva from 'konva';
-import type { Element, Layer, ProjectFile } from '../types';
+import type { DieSettings, Element, Layer, ProjectFile, Unit } from '../types';
 import { getBounds } from './geometry';
 import { DEVICE_DEF_MAP } from './componentDefs';
+import { DEFAULT_SCALE, formatLength, px } from './units';
 
 // --- generic download helpers ----------------------------------------------
 
@@ -48,7 +49,13 @@ export function exportStagePDF(stage: Konva.Stage, name: string): void {
 
 // --- true vector SVG built from the data model -----------------------------
 
-const PAD = 40;
+/**
+ * The SVG's user-space unit is one nanometre, matching the model exactly, and
+ * the `width`/`height` attributes scale that down to a sane pixel size so the
+ * file opens at a usable zoom. Ink sizes are quoted with `px()` for the same
+ * reason they are on canvas: they are annotation, not geometry.
+ */
+const PAD = px(40);
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -58,7 +65,7 @@ function rotateAttr(cx: number, cy: number, deg: number): string {
   return deg ? ` transform="rotate(${deg} ${cx} ${cy})"` : '';
 }
 
-function elementToSVG(el: Element, layers: Layer[]): string {
+function elementToSVG(el: Element, layers: Layer[], unit: Unit): string {
   const layerColor = (id: string | null) =>
     layers.find((l) => l.id === id)?.color ?? '#888';
 
@@ -71,11 +78,11 @@ function elementToSVG(el: Element, layers: Layer[]): string {
       const cy = el.y + el.height / 2;
       const rot = rotateAttr(cx, cy, el.rotation);
       return `<g${rot}>
-  <rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" rx="4"
-        fill="${color}22" stroke="${color}" stroke-width="1.5"/>
-  <text x="${cx}" y="${cy}" fill="${color}" font-size="13" font-family="sans-serif"
+  <rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" rx="${px(4)}"
+        fill="${color}22" stroke="${color}" stroke-width="${px(1.5)}"/>
+  <text x="${cx}" y="${cy}" fill="${color}" font-size="${px(13)}" font-family="sans-serif"
         text-anchor="middle" dominant-baseline="middle">${esc(name)}</text>
-  ${el.label ? `<text x="${el.x + 4}" y="${el.y - 5}" fill="#cbd5e1" font-size="12" font-family="sans-serif">${esc(el.label)}</text>` : ''}
+  ${el.label ? `<text x="${el.x + px(4)}" y="${el.y - px(5)}" fill="#cbd5e1" font-size="${px(12)}" font-family="sans-serif">${esc(el.label)}</text>` : ''}
 </g>`;
     }
     case 'shape': {
@@ -102,13 +109,14 @@ function elementToSVG(el: Element, layers: Layer[]): string {
       const stroke = layerColor(el.layer);
       const mid = el.points.length >= 4;
       const label = el.label && mid
-        ? `<text x="${el.x + el.points[0] + 4}" y="${el.y + el.points[1] - 4}" fill="${stroke}" font-size="11" font-family="sans-serif">${esc(el.label)}</text>`
+        ? `<text x="${el.x + el.points[0] + px(4)}" y="${el.y + el.points[1] - px(4)}" fill="${stroke}" font-size="${px(11)}" font-family="sans-serif">${esc(el.label)}</text>`
         : '';
       return `<polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="${el.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/>${label}`;
     }
     case 'text': {
+      const pad = el.fontSize * 0.4;
       const box = el.callout
-        ? `<rect x="${el.x - 6}" y="${el.y - 6}" width="${el.width + 12}" height="${el.fontSize * 1.6 + 12}" rx="6" fill="#0008" stroke="${el.color}" stroke-width="1"/>`
+        ? `<rect x="${el.x - pad}" y="${el.y - pad}" width="${el.width + pad * 2}" height="${el.fontSize * 1.6 + pad * 2}" rx="${pad}" fill="#0008" stroke="${el.color}" stroke-width="${px(1)}"/>`
         : '';
       return `${box}<text x="${el.x}" y="${el.y + el.fontSize}" fill="${el.color}" font-size="${el.fontSize}" font-family="sans-serif">${esc(el.text)}</text>`;
     }
@@ -118,11 +126,11 @@ function elementToSVG(el: Element, layers: Layer[]): string {
       const ay = el.y + y1;
       const bx = el.x + x2;
       const by = el.y + y2;
-      const d = Math.hypot(x2 - x1, y2 - y1).toFixed(1);
+      const d = formatLength(Math.hypot(x2 - x1, y2 - y1), unit);
       return `<g stroke="#fbbf24" fill="#fbbf24" font-family="sans-serif">
-  <line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke-width="1"/>
-  <circle cx="${ax}" cy="${ay}" r="3"/><circle cx="${bx}" cy="${by}" r="3"/>
-  <text x="${(ax + bx) / 2}" y="${(ay + by) / 2 - 6}" font-size="12" text-anchor="middle" stroke="none">${d}</text>
+  <line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke-width="${px(1)}"/>
+  <circle cx="${ax}" cy="${ay}" r="${px(3)}"/><circle cx="${bx}" cy="${by}" r="${px(3)}"/>
+  <text x="${(ax + bx) / 2}" y="${(ay + by) / 2 - px(6)}" font-size="${px(12)}" text-anchor="middle" stroke="none">${esc(d)}</text>
 </g>`;
     }
   }
@@ -136,21 +144,35 @@ function absPoints(ox: number, oy: number, points: number[]): string {
   return out.join(' ');
 }
 
-export function buildSVG(elements: Element[], layers: Layer[]): string {
-  if (!elements.length) {
+export interface SVGOptions {
+  die: DieSettings;
+  unit: Unit;
+}
+
+export function buildSVG(elements: Element[], layers: Layer[], opts: SVGOptions): string {
+  const { die, unit } = opts;
+  const bounded = die.mode === 'fixed';
+  if (!elements.length && !bounded) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"></svg>`;
   }
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
+  const grow = (x: number, y: number, width: number, height: number) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + width);
+    maxY = Math.max(maxY, y + height);
+  };
+  // A bounded export is framed on the die, so the drawing keeps its real extent
+  // even when the layout only fills a corner of it.
+  if (bounded) grow(0, 0, die.width, die.height);
   for (const el of elements) {
     const b = getBounds(el);
-    minX = Math.min(minX, b.x);
-    minY = Math.min(minY, b.y);
-    maxX = Math.max(maxX, b.x + b.width);
-    maxY = Math.max(maxY, b.y + b.height);
+    grow(b.x, b.y, b.width, b.height);
   }
+
   const w = maxX - minX + PAD * 2;
   const h = maxY - minY + PAD * 2;
   const visibleLayers = new Set(layers.filter((l) => l.visible).map((l) => l.id));
@@ -161,10 +183,20 @@ export function buildSVG(elements: Element[], layers: Layer[]): string {
       if (el.type === 'device' && el.kind === 'block' && el.layer) return visibleLayers.has(el.layer);
       return true;
     })
-    .map((el) => elementToSVG(el, layers))
+    .map((el) => elementToSVG(el, layers, unit))
     .join('\n');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  const dieFrame = bounded
+    ? `<g font-family="sans-serif">
+  <rect x="0" y="0" width="${die.width}" height="${die.height}" fill="none" stroke="#8d7a55" stroke-width="${px(1.5)}"/>
+  <text x="${die.width / 2}" y="${-px(8)}" fill="#b4a892" font-size="${px(12)}" text-anchor="middle">${esc(formatLength(die.width, unit))}</text>
+  <text x="${-px(8)}" y="${die.height / 2}" fill="#b4a892" font-size="${px(12)}" text-anchor="middle"
+        transform="rotate(-90 ${-px(8)} ${die.height / 2})">${esc(formatLength(die.height, unit))}</text>
+</g>`
+    : '';
+
+  // User space is nanometres; width/height bring it back to a sensible page size.
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${round(w * DEFAULT_SCALE)}" height="${round(h * DEFAULT_SCALE)}" viewBox="0 0 ${w} ${h}">
 <defs>
   <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
     <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/>
@@ -172,11 +204,14 @@ export function buildSVG(elements: Element[], layers: Layer[]): string {
 </defs>
 <rect x="0" y="0" width="${w}" height="${h}" fill="#17171b"/>
 <g transform="translate(${PAD - minX}, ${PAD - minY})">
+${dieFrame}
 ${body}
 </g>
 </svg>`;
 }
 
-export function exportSVG(elements: Element[], layers: Layer[], name: string): void {
-  downloadText(buildSVG(elements, layers), `${name}.svg`, 'image/svg+xml');
+const round = (v: number) => Math.round(v * 100) / 100;
+
+export function exportSVG(elements: Element[], layers: Layer[], name: string, opts: SVGOptions): void {
+  downloadText(buildSVG(elements, layers, opts), `${name}.svg`, 'image/svg+xml');
 }

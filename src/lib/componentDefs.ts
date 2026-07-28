@@ -13,16 +13,17 @@ export interface DeviceDef {
 
 /**
  * Catalog of symbolic planning devices shown in the component library.
- * Sizes are in world units (1 unit == 1px at 100% zoom); a device is snapped
- * to the grid on placement.
+ * Sizes are in nanometres and are symbolic rather than process-accurate — they
+ * sit in the few-µm range so a handful of devices reads well next to a die of a
+ * few hundred µm. A device is snapped to the grid on placement.
  */
 export const DEVICE_DEFS: DeviceDef[] = [
   {
     kind: 'nmos',
     name: 'NMOS',
     category: 'Transistors',
-    defaultWidth: 80,
-    defaultHeight: 60,
+    defaultWidth: 2000,
+    defaultHeight: 1500,
     color: '#38bdf8',
     labelPrefix: 'MN',
     hint: 'N-channel MOSFET',
@@ -31,8 +32,8 @@ export const DEVICE_DEFS: DeviceDef[] = [
     kind: 'pmos',
     name: 'PMOS',
     category: 'Transistors',
-    defaultWidth: 80,
-    defaultHeight: 60,
+    defaultWidth: 2000,
+    defaultHeight: 1500,
     color: '#f472b6',
     labelPrefix: 'MP',
     hint: 'P-channel MOSFET',
@@ -41,8 +42,8 @@ export const DEVICE_DEFS: DeviceDef[] = [
     kind: 'resistor',
     name: 'Resistor',
     category: 'Passives',
-    defaultWidth: 40,
-    defaultHeight: 100,
+    defaultWidth: 1000,
+    defaultHeight: 2500,
     color: '#fbbf24',
     labelPrefix: 'R',
     hint: 'Resizable resistor',
@@ -51,8 +52,8 @@ export const DEVICE_DEFS: DeviceDef[] = [
     kind: 'capacitor',
     name: 'Capacitor',
     category: 'Passives',
-    defaultWidth: 90,
-    defaultHeight: 90,
+    defaultWidth: 2000,
+    defaultHeight: 2000,
     color: '#34d399',
     labelPrefix: 'C',
     hint: 'Resizable capacitor',
@@ -61,8 +62,8 @@ export const DEVICE_DEFS: DeviceDef[] = [
     kind: 'well',
     name: 'Well',
     category: 'Structures',
-    defaultWidth: 200,
-    defaultHeight: 160,
+    defaultWidth: 5000,
+    defaultHeight: 4000,
     color: '#64748b',
     labelPrefix: 'NW',
     hint: 'N-well / P-well region',
@@ -71,8 +72,8 @@ export const DEVICE_DEFS: DeviceDef[] = [
     kind: 'guardring',
     name: 'Guard Ring',
     category: 'Structures',
-    defaultWidth: 220,
-    defaultHeight: 180,
+    defaultWidth: 5500,
+    defaultHeight: 4500,
     color: '#22d3ee',
     labelPrefix: 'GR',
     hint: 'Substrate guard ring',
@@ -81,8 +82,8 @@ export const DEVICE_DEFS: DeviceDef[] = [
     kind: 'block',
     name: 'Block',
     category: 'Structures',
-    defaultWidth: 180,
-    defaultHeight: 120,
+    defaultWidth: 4500,
+    defaultHeight: 3000,
     color: '#e2e8f0',
     labelPrefix: 'BLK',
     hint: 'Generic layout block',

@@ -2,7 +2,14 @@
 // Core data model for the IC Layout Planner.
 // Everything on the canvas is an `Element` (discriminated union on `type`).
 // Elements are symbolic planning objects — NOT process-accurate layout cells.
+//
+// All coordinates and sizes are in nanometres (see `lib/units.ts`); the display
+// unit is a view setting and never changes what is stored.
 // ---------------------------------------------------------------------------
+
+import type { Unit } from './lib/units';
+
+export type { Unit } from './lib/units';
 
 export type Tool =
   | 'select'
@@ -34,7 +41,7 @@ export interface Layer {
   locked: boolean;
 }
 
-/** Fields shared by every element. `x`/`y` is the element origin in world units. */
+/** Fields shared by every element. `x`/`y` is the element origin, in nm. */
 export interface ElementBase {
   id: string;
   x: number;
@@ -110,24 +117,46 @@ export type Element =
   | MeasureElement;
 
 export interface GridSettings {
+  /** Snap step, in nm. */
   size: number;
   snap: boolean;
   visible: boolean;
   showRulers: boolean;
 }
 
+/**
+ * The drawing area. `infinite` is an unbounded canvas; `fixed` fences the
+ * layout into a die of a known size, with its top-left corner at the origin —
+ * so every in-bounds coordinate is positive, as in a real floorplan.
+ */
+export interface DieSettings {
+  mode: 'infinite' | 'fixed';
+  /** Die extents in nm. Kept while in `infinite` mode so toggling is lossless. */
+  width: number;
+  height: number;
+}
+
 export interface ViewState {
   x: number;
   y: number;
+  /** Screen pixels per nanometre. */
   scale: number;
 }
 
-/** Serialized project file (JSON import/export + localStorage). */
+/**
+ * Serialized project file (JSON import/export + localStorage).
+ *
+ * v1 files predate the nanometre model: their geometry is in screen pixels at
+ * 100 % zoom and they have no `die`/`unit`. `migrateProject` upgrades them.
+ */
 export interface ProjectFile {
-  version: 1;
+  version: 2;
   name: string;
   elements: Element[];
   layers: Layer[];
   grid: GridSettings;
+  die: DieSettings;
+  /** Display unit for the UI — purely presentational. */
+  unit: Unit;
   savedAt: string;
 }

@@ -11,6 +11,10 @@ import type { NetlistCell, NetlistDevice, ParsedNetlist } from './netlist';
 import { formatValue, parseValue, toMicrons } from './netlist';
 import { DEVICE_DEF_MAP } from './componentDefs';
 import { uid } from './geometry';
+import { px } from './units';
+
+/** Type size for a generated cell label, in nm. */
+const LABEL_FONT = px(16);
 
 export interface NetlistImportOptions {
   /** Cell names to generate (matches `NetlistCell.name`). */
@@ -23,7 +27,7 @@ export interface NetlistImportOptions {
   labelCells: boolean;
   /** Devices per row; 0 = auto (roughly square). */
   columns: number;
-  /** Gap between devices, in world units. */
+  /** Gap between devices, in nm. */
   spacing: number;
 }
 
@@ -32,7 +36,7 @@ export const DEFAULT_IMPORT_OPTIONS: Omit<NetlistImportOptions, 'cells'> = {
   groupCells: true,
   labelCells: true,
   columns: 0,
-  spacing: 40,
+  spacing: 1_000, // 1 µm
 };
 
 interface Ctx {
@@ -197,13 +201,13 @@ export function buildNetlistElements(
         locked: false,
         groupId,
         text: `${cell.name}  —  ${cell.devices.length} device${cell.devices.length === 1 ? '' : 's'}`,
-        fontSize: 16,
+        fontSize: LABEL_FONT,
         color: '#e7e7ee',
-        width: 320,
+        width: LABEL_FONT * 20,
         callout: false,
       };
       out.push(label);
-      cursorY = snapPos(cursorY + 34, ctx.gridSize, ctx.snap);
+      cursorY = snapPos(cursorY + LABEL_FONT * 2.2, ctx.gridSize, ctx.snap);
     }
 
     const placed: Placed[] = cell.devices.map((d) => {
