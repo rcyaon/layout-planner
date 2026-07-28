@@ -157,12 +157,7 @@ export default function App() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-panel text-ink">
       <header className="flex items-center gap-2.5 border-b border-edge bg-panel px-4 py-2 shadow-soft">
-        <span className="relative mr-1 text-[15px] font-display font-bold tracking-tight text-ink">
-          Layout Planner
-          <svg className="pointer-events-none absolute -bottom-1.5 left-0 w-full" height="5" viewBox="0 0 120 5" preserveAspectRatio="none">
-            <path d="M1 3 C 20 0, 42 5, 62 2.5 S 100 1, 119 3" stroke="#d99b3c" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-          </svg>
-        </span>
+        <span className="mr-1 text-[15px] font-display font-bold tracking-tight text-ink">Layout Planner</span>
         <ProjectNameField />
       </header>
 
