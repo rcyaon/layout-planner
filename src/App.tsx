@@ -2,10 +2,10 @@ import { useEffect } from 'react';
 import CanvasStage from './canvas/CanvasStage';
 import Toolbar from './components/Toolbar';
 import ComponentLibrary from './components/ComponentLibrary';
-import PropertiesPanel from './components/PropertiesPanel';
 import LayerPanel from './components/LayerPanel';
 import StatusBar from './components/StatusBar';
 import Doodles from './components/Doodles';
+import ProjectNameField from './components/ProjectNameField';
 import NetlistDialog from './components/NetlistDialog';
 import { useStore } from './store/useStore';
 import type { Tool } from './types';
@@ -30,8 +30,6 @@ function isTyping(t: EventTarget | null): boolean {
 }
 
 export default function App() {
-  const projectName = useStore((s) => s.projectName);
-
   // --- keyboard shortcuts ---------------------------------------------------
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -153,21 +151,19 @@ export default function App() {
             <path d="M1 3 C 20 0, 42 5, 62 2.5 S 100 1, 119 3" stroke="#d99b3c" strokeWidth="2.2" fill="none" strokeLinecap="round" />
           </svg>
         </span>
-        <span className="rounded-full bg-panelalt px-2.5 py-0.5 text-xs font-medium text-muted">{projectName}</span>
+        <ProjectNameField />
       </header>
 
       <Toolbar />
 
       <div className="flex min-h-0 flex-1">
-        <ComponentLibrary />
+        {/* Left rail: component library on top, metal layers pinned below it. */}
+        <div className="flex w-60 shrink-0 flex-col border-r border-edge bg-panel">
+          <ComponentLibrary />
+          <LayerPanel />
+        </div>
         <div className="min-w-0 flex-1 p-2">
           <CanvasStage />
-        </div>
-        <div className="flex w-64 shrink-0 flex-col border-l border-edge bg-panel">
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <PropertiesPanel />
-          </div>
-          <LayerPanel />
         </div>
       </div>
 

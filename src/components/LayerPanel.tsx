@@ -8,9 +8,10 @@ export default function LayerPanel() {
   const setActiveLayer = useStore((s) => s.setActiveLayer);
 
   return (
-    <div className="border-t border-edge">
+    <div className="shrink-0 border-t border-edge">
       <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">Metal Layers</div>
-      <div className="flex flex-col gap-1 px-2 pb-3">
+      {/* Capped so a long stack scrolls here instead of squeezing the library. */}
+      <div className="scroll-thin flex max-h-56 flex-col gap-1 overflow-y-auto px-2 pb-3">
         {layers.map((l) => {
           const active = l.id === activeLayer;
           return (

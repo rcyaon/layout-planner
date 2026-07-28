@@ -12,7 +12,9 @@ export default function ComponentLibrary() {
   };
 
   return (
-    <div className="flex h-full w-60 shrink-0 flex-col border-r border-edge bg-panel">
+    // Width, border and background belong to the left rail in App; this just
+    // takes the space the layer panel below it doesn't need.
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-4 pb-2 pt-3 text-sm font-bold text-ink">Components</div>
       <div className="scroll-thin flex-1 overflow-y-auto px-2 pb-3">
         <div className="grid grid-cols-2 gap-1">
