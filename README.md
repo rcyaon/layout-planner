@@ -1,19 +1,12 @@
 # IC Layout Planner
 
 A browser-based tool for **planning and communicating** analog / mixed-signal IC
-floorplans before you open a full custom layout editor (Cadence Virtuoso, Magic
-VLSI, KLayout). Think Figma / Excalidraw, but with transistors, passives, vias,
-guard rings and metal routing.
+floorplans before you open a full custom layout editor.
 
 > These are **symbolic planning objects**, not process-accurate layout cells. The
 > tool intentionally does **not** run DRC/LVS, simulate, or generate manufacturable
 > layout — it helps you organize devices, routing, symmetry, matching and
 > floorplanning first.
-
-The UI is a light, chill, Figma-style workspace; the canvas is a dark
-**Virtuoso-style layout view** where each device is drawn as simplified process
-layers (diffusion / poly gate / contacts / metal / n-well) with stipple & hatch
-fills, so a floorplan reads like layout rather than a schematic.
 
 ## Getting started
 
