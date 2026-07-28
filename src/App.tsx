@@ -157,7 +157,7 @@ export default function App() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-panel text-ink">
       <header className="flex items-center gap-2.5 border-b border-edge bg-panel px-4 py-2 shadow-soft">
-        <span className="mr-1 text-[15px] font-display font-bold tracking-tight text-ink">Layout Planner</span>
+        <span className="mr-1 text-[15px] font-bold tracking-tight text-ink">Layout Planner</span>
         <ProjectNameField />
       </header>
 
