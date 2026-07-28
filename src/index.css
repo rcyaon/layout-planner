@@ -32,6 +32,13 @@ select,
   text-transform: none;
 }
 
+/* Browsers reset text-transform on form controls, so the body rule never
+   reaches button labels. Buttons carry UI copy rather than data, so put them
+   back to inheriting it. */
+button {
+  text-transform: inherit;
+}
+
 /* Thin, friendly scrollbars */
 .scroll-thin::-webkit-scrollbar {
   width: 9px;

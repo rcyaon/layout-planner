@@ -19,7 +19,9 @@ export default function ProjectNameField() {
 
   // A first-run affordance: once the project has a real name the pill speaks
   // for itself, so the hint retires rather than sitting in the header forever.
-  const showHint = projectName === 'untitled' && !focused;
+  // Matched case-insensitively — autosaves written before the default was
+  // lowercased still carry "Untitled", and those count as unnamed too.
+  const showHint = projectName.trim().toLowerCase() === 'untitled' && !focused;
 
   // Follow the store when the name changes elsewhere (new project, opening a
   // file, undo) — but never while the user is mid-edit.
