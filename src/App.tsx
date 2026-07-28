@@ -4,13 +4,15 @@ import Toolbar from './components/Toolbar';
 import ComponentLibrary from './components/ComponentLibrary';
 import LayerPanel from './components/LayerPanel';
 import StatusBar from './components/StatusBar';
-import Doodles from './components/Doodles';
 import ProjectNameField from './components/ProjectNameField';
 import NetlistDialog from './components/NetlistDialog';
 import { useStore } from './store/useStore';
 import type { Tool } from './types';
 
 const AUTOSAVE_KEY = 'iclp:autosave';
+
+/** Screen pixels the arrow keys pan the canvas when nothing is selected. */
+const PAN_STEP = 60;
 
 const TOOL_KEYS: Record<string, Tool> = {
   v: 'select',
@@ -87,14 +89,26 @@ export default function App() {
         return;
       }
 
-      if (e.key.startsWith('Arrow') && st.selectedIds.length) {
+      if (e.key.startsWith('Arrow')) {
         e.preventDefault();
-        const d = st.grid.snap ? st.grid.size : 1;
-        const step = e.shiftKey ? d * 5 : d;
-        if (e.key === 'ArrowLeft') st.moveSelectedBy(-step, 0);
-        else if (e.key === 'ArrowRight') st.moveSelectedBy(step, 0);
-        else if (e.key === 'ArrowUp') st.moveSelectedBy(0, -step);
-        else if (e.key === 'ArrowDown') st.moveSelectedBy(0, step);
+        if (st.selectedIds.length) {
+          // Something is selected — nudge it.
+          const d = st.grid.snap ? st.grid.size : 1;
+          const step = e.shiftKey ? d * 5 : d;
+          if (e.key === 'ArrowLeft') st.moveSelectedBy(-step, 0);
+          else if (e.key === 'ArrowRight') st.moveSelectedBy(step, 0);
+          else if (e.key === 'ArrowUp') st.moveSelectedBy(0, -step);
+          else if (e.key === 'ArrowDown') st.moveSelectedBy(0, step);
+        } else {
+          // Nothing selected — walk the viewport instead. view.x/y are screen
+          // offsets, so looking right means shifting the content left.
+          const step = e.shiftKey ? PAN_STEP * 4 : PAN_STEP;
+          const v = st.view;
+          if (e.key === 'ArrowLeft') st.setView({ x: v.x + step });
+          else if (e.key === 'ArrowRight') st.setView({ x: v.x - step });
+          else if (e.key === 'ArrowUp') st.setView({ y: v.y + step });
+          else if (e.key === 'ArrowDown') st.setView({ y: v.y - step });
+        }
         return;
       }
 
@@ -141,9 +155,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-appbg text-ink">
-      <Doodles />
-      <div className="absolute inset-5 z-10 flex flex-col overflow-hidden rounded-2xl border border-edge bg-panel shadow-pop">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-panel text-ink">
       <header className="flex items-center gap-2.5 border-b border-edge bg-panel px-4 py-2 shadow-soft">
         <span className="relative mr-1 text-[15px] font-display font-bold tracking-tight text-ink">
           Layout Planner
@@ -162,13 +174,13 @@ export default function App() {
           <ComponentLibrary />
           <LayerPanel />
         </div>
-        <div className="min-w-0 flex-1 p-2">
+        {/* No padding — the canvas runs edge to edge. */}
+        <div className="min-w-0 flex-1">
           <CanvasStage />
         </div>
       </div>
 
       <StatusBar />
-      </div>
       <NetlistDialog />
     </div>
   );

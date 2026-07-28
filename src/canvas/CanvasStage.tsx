@@ -153,21 +153,37 @@ export default function CanvasStage() {
     y: snap(p.y, grid.size, grid.snap),
   });
 
-  // --- wheel zoom -----------------------------------------------------------
+  // --- wheel: scroll pans, pinch/modifier zooms ------------------------------
+  // Two-finger trackpad scrolling pans in both axes. Browsers report a pinch
+  // gesture as a wheel event with ctrlKey set, so that (and Cmd/Ctrl+wheel for
+  // mouse users) is what zooms. Reading view from the store rather than the
+  // render closure keeps rapid wheel bursts from compounding a stale offset.
   const onWheel = (e: KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
     const stage = stageRef.current!;
+    const st = useStore.getState();
+    const v = st.view;
+
+    if (!e.evt.ctrlKey && !e.evt.metaKey) {
+      // Shift+wheel is the conventional "scroll sideways" for wheel mice that
+      // only ever produce deltaY.
+      const dx = e.evt.shiftKey && e.evt.deltaX === 0 ? e.evt.deltaY : e.evt.deltaX;
+      const dy = e.evt.shiftKey && e.evt.deltaX === 0 ? 0 : e.evt.deltaY;
+      st.setView({ x: v.x - dx, y: v.y - dy });
+      return;
+    }
+
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
-    const oldScale = view.scale;
+    const oldScale = v.scale;
     const mousePointTo = {
-      x: (pointer.x - view.x) / oldScale,
-      y: (pointer.y - view.y) / oldScale,
+      x: (pointer.x - v.x) / oldScale,
+      y: (pointer.y - v.y) / oldScale,
     };
-    const factor = 1.08;
-    let newScale = e.evt.deltaY > 0 ? oldScale / factor : oldScale * factor;
-    newScale = Math.max(0.05, Math.min(20, newScale));
-    useStore.getState().setView({
+    // Pinch deltas are fine-grained, so scale the step by the delta itself
+    // instead of a fixed factor — otherwise trackpad zoom feels stepped.
+    const newScale = Math.max(0.05, Math.min(20, oldScale * Math.exp(-e.evt.deltaY / 200)));
+    st.setView({
       scale: newScale,
       x: pointer.x - mousePointTo.x * newScale,
       y: pointer.y - mousePointTo.y * newScale,
@@ -416,7 +432,7 @@ export default function CanvasStage() {
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden rounded-xl2 border border-edge bg-canvas shadow-soft"
+      className="relative h-full w-full overflow-hidden bg-canvas"
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDrop}
     >
